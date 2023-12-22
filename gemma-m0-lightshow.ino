@@ -1,20 +1,14 @@
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_ZeroFFT.h>
 
-#define DATA_SIZE 256
+#define DATA_SIZE 2048
 
 #define NUM_PIXELS 9
 
-#define SAMPLE_RATE 22000
-
-#define FREQ_MIN 600
-#define FREQ_MAX 3000
-
-#define MIN_INDEX FFT_INDEX(FREQ_MIN, SAMPLE_RATE, DATA_SIZE)
-#define MAX_INDEX FFT_INDEX(FREQ_MAX, SAMPLE_RATE, DATA_SIZE)
-
 int16_t pixelData[NUM_PIXELS];
 int16_t inputData[DATA_SIZE];
+
+#define MIC_PIN A2
 
 Adafruit_NeoPixel pixels(NUM_PIXELS, A0, NEO_GRB + NEO_KHZ800);
 
@@ -30,7 +24,25 @@ void setup()
 
 void loop()
 {
-	for (int i  = 0; i < NUM_PIXELS; i++) {
-        pixels.setPixelColor(i, pixels.ColorHSV(hues[i]++));
+    uint32_t avg = 0;
+    for (int i = 0; i < DATA_SIZE; i++) {
+        uint32_t mic_val = analogRead(MIC_PIN);
+        inputData[i] = mic_val;
+    }
+
+    avg = avg/DATA_SIZE;
+    for(int i=0; i<DATA_SIZE; i++) {
+        inputData[i] = (inputData[i] - avg) * 64;
+    }
+
+    ZeroFFT(inputData, DATA_SIZE);
+
+	for (int i = 0; i < NUM_PIXELS; i++) {
+        uint32_t bucket_avg = 0;
+        // TODO: rewrite to handle arbitrary pixel count and input data size. Should be logarithmic...
+        for(int j = 1 << i; j < 2<<i; j++) { // this drops the lowest bucket... I think that's OK.
+            bucket_avg += inputData[i];
+        }
+        pixels.setPixelColor(i, pixels.ColorHSV(hues[i]++, 255, 100 + bucket_avg / (1024 << i)));
     }
 }
